@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LexAI — Yapay Zeka Destekli Sözleşme Analiz Motoru</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --gold: #c9a84c;
+    --gold-light: #e8c96a;
+    --gold-dim: #8a6d28;
+    --ink: #04080f;
+    --navy: #070d1a;
+    --surface: #0b1220;
+    --surface2: #0f1a2e;
+    --border: #1a2a45;
+    --text: #d4c9b0;
+    --text-dim: #6b7a8d;
+    --red: #c0392b;
+    --green: #1a6b4a;
+    --amber: #d97706;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--ink);
+    color: var(--text);
+    font-family: 'Libre Baskerville', Georgia, serif;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* Custom cursor */
+  #cursor {
+    position: fixed; width: 12px; height: 12px;
+    background: var(--gold); border-radius: 50%;
+    pointer-events: none; z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s, width 0.2s, height 0.2s, opacity 0.2s;
+    mix-blend-mode: difference;
+  }
+  #cursor-ring {
+    position: fixed; width: 36px; height: 36px;
+    border: 1px solid var(--gold-dim); border-radius: 50%;
+    pointer-events: none; z-index: 9998;
+    transform: translate(-50%, -50%);
+    transition: transform 0.15s ease-out, width 0.3s, height 0.3s;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(201,168,76,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(201,168,76,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+  }
+
+  /* Noise texture */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 1;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; opacity: 0.6;
+  }
+
+  .container { max-width: 1160px; margin: 0 auto; padding: 0 40px; position: relative; z-index: 2; }
+
+  /* ── NAV ─────────────────────────────────────────────── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 20px 0;
+    background: linear-gradient(to bottom, rgba(4,8,15,0.95), rgba(4,8,15,0));
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(201,168,76,0.08);
+  }
+  nav .inner {
+    display: flex; align-items: center; justify-content: space-between;
+    max-width: 1160px; margin: 0 auto; padding: 0 40px;
+  }
+  .logo {
+    font-family: 'Cinzel', serif; font-size: 22px; font-weight: 900;
+    letter-spacing: 3px; color: var(--gold);
+    text-decoration: none;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-seal {
+    width: 32px; height: 32px;
+    border: 1.5px solid var(--gold);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  nav ul { list-style: none; display: flex; gap: 36px; }
+  nav a { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); text-decoration: none; transition: color 0.2s; }
+  nav a:hover { color: var(--gold); }
+  .nav-cta {
+    font-family: 'Cinzel', serif !important; font-size: 12px !important;
+    color: var(--ink) !important; background: var(--gold); padding: 10px 22px;
+    border-radius: 2px; letter-spacing: 2px !important; text-transform: uppercase;
+    transition: all 0.2s !important;
+  }
+  .nav-cta:hover { background: var(--gold-light) !important; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(201,168,76,0.3); }
+
+  /* ── HERO ────────────────────────────────────────────── */
+  .hero {
+    min-height: 100vh; display: flex; align-items: center;
+    padding: 120px 0 80px;
+    position: relative; overflow: hidden;
+  }
+  .hero-glow {
+    position: absolute; top: 10%; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 600px;
+    background: radial-gradient(ellipse, rgba(201,168,76,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid rgba(201,168,76,0.3);
+    padding: 6px 16px; border-radius: 2px; margin-bottom: 32px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--gold-dim); letter-spacing: 2px; text-transform: uppercase;
+    animation: fadeUp 0.8s ease both;
+  }
+  .badge-dot { width: 6px; height: 6px; background: var(--gold); border-radius: 50%; animation: pulse-dot 2s infinite; }
+  @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.7)} }
+
+  h1 {
+    font-family: 'Cinzel', serif; font-size: clamp(42px, 6vw, 84px);
+    font-weight: 900; line-height: 1.0; letter-spacing: -1px;
+    color: #f0e8d5;
+    animation: fadeUp 0.8s 0.1s ease both;
+  }
+  h1 em { color: var(--gold); font-style: normal; display: block; }
+  .hero-sub {
+    margin-top: 28px; font-size: 18px; line-height: 1.7;
+    color: var(--text-dim); max-width: 560px;
+    animation: fadeUp 0.8s 0.2s ease both;
+  }
+  .hero-actions {
+    margin-top: 44px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    animation: fadeUp 0.8s 0.3s ease both;
+  }
+  .btn-primary {
+    font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: 3px; text-transform: uppercase;
+    background: var(--gold); color: var(--ink); border: none;
+    padding: 18px 40px; cursor: pointer; border-radius: 2px;
+    transition: all 0.25s; font-weight: 700;
+    position: relative; overflow: hidden;
+  }
+  .btn-primary::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.15) 50%, transparent 70%);
+    transform: translateX(-100%); transition: transform 0.5s;
+  }
+  .btn-primary:hover::before { transform: translateX(100%); }
+  .btn-primary:hover { background: var(--gold-light); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(201,168,76,0.35); }
+  .btn-secondary {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 2px;
+    color: var(--text-dim); background: none; border: 1px solid var(--border);
+    padding: 18px 32px; cursor: pointer; border-radius: 2px;
+    transition: all 0.2s; text-transform: uppercase;
+  }
+  .btn-secondary:hover { border-color: var(--gold-dim); color: var(--gold); }
+
+  .hero-stats {
+    display: flex; gap: 48px; margin-top: 64px;
+    animation: fadeUp 0.8s 0.4s ease both;
+  }
+  .stat { border-left: 2px solid var(--gold-dim); padding-left: 20px; }
+  .stat-num { font-family: 'Cinzel', serif; font-size: 36px; color: var(--gold); font-weight: 700; line-height: 1; }
+  .stat-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; margin-top: 6px; }
+
+  /* ── CONTRACT PREVIEW ANIMATION ──────────────────────── */
+  .hero-visual {
+    position: absolute; right: -20px; top: 50%; transform: translateY(-50%);
+    width: 460px; opacity: 0; animation: slideIn 1s 0.5s ease both;
+  }
+  @keyframes slideIn { from{opacity:0;transform:translateY(-50%) translateX(60px)} to{opacity:1;transform:translateY(-50%) translateX(0)} }
+  .doc-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 28px; position: relative; overflow: hidden;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(201,168,76,0.1);
+  }
+  .doc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .doc-title { font-family: 'Cinzel', serif; font-size: 13px; color: var(--gold); letter-spacing: 1px; }
+  .scan-line {
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    animation: scandown 3s ease-in-out infinite;
+    box-shadow: 0 0 20px var(--gold);
+  }
+  @keyframes scandown { 0%{top:60px;opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{top:calc(100% - 20px);opacity:0} }
+  .doc-line {
+    height: 8px; border-radius: 2px; margin-bottom: 10px;
+    background: var(--surface2); position: relative; overflow: hidden;
+  }
+  .doc-line::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(201,168,76,0.15), transparent);
+    transform: translateX(-100%);
+    animation: shimmer 2s 1s infinite;
+  }
+  @keyframes shimmer { to{transform:translateX(100%)} }
+  .doc-line.w-90 { width: 90%; }
+  .doc-line.w-75 { width: 75%; }
+  .doc-line.w-85 { width: 85%; }
+  .doc-line.w-60 { width: 60%; }
+  .doc-line.flagged { background: rgba(192,57,43,0.25); border: 1px solid rgba(192,57,43,0.4); }
+  .doc-line.flagged-warn { background: rgba(217,119,6,0.2); border: 1px solid rgba(217,119,6,0.35); }
+  .flag-tag {
+    position: absolute; right: -1px; top: -1px;
+    font-family: 'JetBrains Mono', monospace; font-size: 8px;
+    background: var(--red); color: #fff; padding: 2px 6px; border-radius: 0 2px 0 2px;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .risk-badge {
+    display: flex; align-items: center; gap: 12px; margin-top: 20px;
+    padding: 12px 16px; background: rgba(192,57,43,0.1); border: 1px solid rgba(192,57,43,0.3); border-radius: 3px;
+  }
+  .risk-num { font-family: 'Cinzel', serif; font-size: 28px; color: #e74c3c; font-weight: 700; }
+  .risk-text { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #e74c3c; letter-spacing: 1px; }
+
+  /* ── LOGOS ────────────────────────────────────────────── */
+  .logos-section { padding: 48px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .logos-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 3px; color: var(--text-dim); text-align: center; margin-bottom: 28px; text-transform: uppercase; }
+  .logos-track { display: flex; gap: 64px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .logo-item { font-family: 'Cinzel', serif; font-size: 16px; color: var(--border); letter-spacing: 2px; font-weight: 700; opacity: 0.5; transition: opacity 0.3s; }
+  .logo-item:hover { opacity: 1; color: var(--gold-dim); }
+
+  /* ── HOW IT WORKS ─────────────────────────────────────── */
+  .section { padding: 120px 0; }
+  .section-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 4px;
+    color: var(--gold-dim); text-transform: uppercase; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .section-label::before { content: ''; display: block; width: 32px; height: 1px; background: var(--gold-dim); }
+  h2 { font-family: 'Cinzel', serif; font-size: clamp(32px, 4vw, 52px); color: #f0e8d5; font-weight: 900; line-height: 1.1; }
+  h2 em { color: var(--gold); font-style: normal; }
+  .section-sub { margin-top: 20px; font-size: 17px; color: var(--text-dim); max-width: 540px; line-height: 1.7; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 64px; }
+  .step {
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 40px 32px; position: relative; overflow: hidden;
+    transition: border-color 0.3s, background 0.3s;
+  }
+  .step:hover { border-color: var(--gold-dim); background: var(--surface2); }
+  .step::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--gold-dim), transparent); transform: scaleX(0); transition: transform 0.4s; }
+  .step:hover::before { transform: scaleX(1); }
+  .step-num { font-family: 'Cinzel', serif; font-size: 64px; font-weight: 900; color: rgba(201,168,76,0.08); line-height: 1; margin-bottom: 20px; }
+  .step-icon { font-size: 28px; margin-bottom: 16px; }
+  .step-title { font-family: 'Cinzel', serif; font-size: 18px; color: #f0e8d5; margin-bottom: 12px; letter-spacing: 0.5px; }
+  .step-text { font-size: 14px; color: var(--text-dim); line-height: 1.7; }
+
+  /* ── FEATURES ─────────────────────────────────────────── */
+  .features-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin-top: 64px; }
+  .feature {
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 36px 32px; transition: all 0.3s; position: relative; overflow: hidden;
+  }
+  .feature:hover { background: var(--surface2); border-color: var(--gold-dim); }
+  .feature-icon { font-size: 32px; margin-bottom: 20px; }
+  .feature-title { font-family: 'Cinzel', serif; font-size: 19px; color: #f0e8d5; margin-bottom: 12px; }
+  .feature-text { font-size: 15px; color: var(--text-dim); line-height: 1.7; }
+  .feature-tag {
+    display: inline-block; margin-top: 16px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 2px;
+    color: var(--gold-dim); border: 1px solid rgba(201,168,76,0.2);
+    padding: 4px 12px; border-radius: 1px; text-transform: uppercase;
+  }
+
+  /* ── RISK DEMO ────────────────────────────────────────── */
+  .risk-demo-section { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 100px 0; }
+  .risk-demo { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; margin-top: 60px; }
+  .score-board { display: grid; gap: 12px; }
+  .score-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 20px; background: var(--ink);
+    border: 1px solid var(--border); border-radius: 3px;
+  }
+  .score-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); letter-spacing: 1px; flex: 1; text-transform: uppercase; }
+  .score-bar-wrap { flex: 2; height: 6px; background: var(--border); border-radius: 1px; overflow: hidden; }
+  .score-bar { height: 100%; border-radius: 1px; transition: width 2s cubic-bezier(0.4,0,0.2,1); }
+  .score-val { font-family: 'Cinzel', serif; font-size: 18px; font-weight: 700; min-width: 36px; text-align: right; }
+
+  .flag-list { display: grid; gap: 12px; }
+  .flag-item {
+    padding: 16px 20px; border-radius: 3px; border-left: 3px solid;
+    background: var(--ink);
+  }
+  .flag-item.critical { border-color: #c0392b; }
+  .flag-item.high { border-color: var(--amber); }
+  .flag-item.medium { border-color: #f1c40f; }
+  .flag-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .flag-name { font-family: 'Cinzel', serif; font-size: 14px; color: #f0e8d5; }
+  .flag-severity {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 2px;
+    padding: 3px 10px; border-radius: 1px; text-transform: uppercase; font-weight: 500;
+  }
+  .sev-critical { background: rgba(192,57,43,0.2); color: #e74c3c; }
+  .sev-high { background: rgba(217,119,6,0.2); color: var(--amber); }
+  .sev-medium { background: rgba(241,196,15,0.15); color: #f1c40f; }
+  .flag-desc { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+
+  /* ── PRICING ──────────────────────────────────────────── */
+  .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 64px; }
+  .plan {
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 44px 32px; position: relative; transition: all 0.3s;
+  }
+  .plan:hover { transform: translateY(-4px); }
+  .plan.featured {
+    border-color: var(--gold-dim);
+    background: linear-gradient(160deg, var(--surface2) 0%, var(--surface) 100%);
+  }
+  .plan.featured::before { content: 'EN POPÜLER'; position: absolute; top: -1px; left: 50%; transform: translateX(-50%); font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 3px; background: var(--gold); color: var(--ink); padding: 4px 16px; border-radius: 0 0 3px 3px; font-weight: 700; }
+  .plan-name { font-family: 'Cinzel', serif; font-size: 14px; letter-spacing: 3px; color: var(--gold-dim); text-transform: uppercase; margin-bottom: 16px; }
+  .plan-price { font-family: 'Cinzel', serif; font-size: 52px; color: #f0e8d5; font-weight: 900; line-height: 1; }
+  .plan-price sup { font-size: 22px; vertical-align: super; }
+  .plan-period { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); letter-spacing: 1px; margin-top: 8px; }
+  .plan-divider { height: 1px; background: var(--border); margin: 28px 0; }
+  .plan-features { list-style: none; display: grid; gap: 12px; }
+  .plan-features li { font-size: 14px; color: var(--text-dim); display: flex; gap: 10px; align-items: flex-start; line-height: 1.5; }
+  .plan-features li::before { content: '–'; color: var(--gold-dim); flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+  .plan-features li.unavail { opacity: 0.35; }
+  .plan-features li.unavail::before { content: '×'; }
+  .btn-plan {
+    width: 100%; margin-top: 32px; padding: 14px; border: 1px solid var(--border);
+    background: none; color: var(--text-dim); font-family: 'Cinzel', serif; font-size: 12px;
+    letter-spacing: 2px; text-transform: uppercase; cursor: pointer; border-radius: 2px; transition: all 0.2s;
+  }
+  .btn-plan:hover { border-color: var(--gold-dim); color: var(--gold); }
+  .btn-plan.featured-btn { background: var(--gold); color: var(--ink); border-color: var(--gold); font-weight: 700; }
+  .btn-plan.featured-btn:hover { background: var(--gold-light); }
+
+  /* ── TESTIMONIALS ─────────────────────────────────────── */
+  .testimonials { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 64px; }
+  .testimonial { background: var(--surface); border: 1px solid var(--border); padding: 36px 28px; }
+  .testimonial-text { font-size: 15px; color: var(--text); line-height: 1.8; font-style: italic; margin-bottom: 24px; }
+  .testimonial-text::before { content: '"'; font-family: 'Cinzel', serif; font-size: 48px; color: var(--gold-dim); line-height: 0; vertical-align: -20px; margin-right: 4px; }
+  .testimonial-author { display: flex; align-items: center; gap: 12px; }
+  .author-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .author-name { font-family: 'Cinzel', serif; font-size: 13px; color: #f0e8d5; }
+  .author-role { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-dim); letter-spacing: 1px; margin-top: 3px; }
+  .stars { color: var(--gold); font-size: 12px; letter-spacing: 2px; margin-bottom: 16px; }
+
+  /* ── FAQ ──────────────────────────────────────────────── */
+  .faq-list { max-width: 760px; margin: 64px auto 0; }
+  .faq-item { border-bottom: 1px solid var(--border); }
+  .faq-q {
+    width: 100%; background: none; border: none; color: #f0e8d5;
+    font-family: 'Cinzel', serif; font-size: 17px; text-align: left;
+    padding: 28px 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    transition: color 0.2s; letter-spacing: 0.3px;
+  }
+  .faq-q:hover { color: var(--gold); }
+  .faq-q .arrow { font-size: 20px; color: var(--gold-dim); transition: transform 0.3s; }
+  .faq-q.open .arrow { transform: rotate(45deg); }
+  .faq-a { font-size: 15px; color: var(--text-dim); line-height: 1.8; padding-bottom: 28px; display: none; }
+  .faq-a.open { display: block; }
+
+  /* ── CTA SECTION ──────────────────────────────────────── */
+  .cta-section {
+    text-align: center; padding: 140px 0;
+    background: radial-gradient(ellipse at center, rgba(201,168,76,0.06) 0%, transparent 70%);
+    border-top: 1px solid var(--border);
+  }
+  .cta-section h2 { font-size: clamp(36px, 5vw, 64px); }
+  .cta-section p { font-size: 18px; color: var(--text-dim); max-width: 500px; margin: 24px auto 48px; line-height: 1.7; }
+  .cta-note { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); margin-top: 24px; letter-spacing: 1px; }
+
+  /* ── FOOTER ───────────────────────────────────────────── */
+  footer { border-top: 1px solid var(--border); padding: 60px 0; }
+  .footer-inner { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 40px; }
+  .footer-brand p { font-size: 14px; color: var(--text-dim); margin-top: 12px; max-width: 280px; line-height: 1.7; }
+  .footer-links h4 { font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 2px; color: var(--gold-dim); text-transform: uppercase; margin-bottom: 20px; }
+  .footer-links ul { list-style: none; display: grid; gap: 12px; }
+  .footer-links a { font-size: 14px; color: var(--text-dim); text-decoration: none; transition: color 0.2s; }
+  .footer-links a:hover { color: var(--gold); }
+  .footer-bottom { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .footer-bottom p { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); letter-spacing: 1px; }
+  .disclaimer-text { font-size: 11px; color: #334155; max-width: 600px; line-height: 1.6; }
+
+  /* ── ANIMATIONS ───────────────────────────────────────── */
+  @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:none} }
+  .reveal { opacity: 0; transform: translateY(32px); transition: opacity 0.7s ease, transform 0.7s ease; }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  /* ── RESPONSIVE ───────────────────────────────────────── */
+  @media(max-width: 900px) {
+    .hero-visual { display: none; }
+    .steps, .features-grid, .pricing-grid, .testimonials { grid-template-columns: 1fr; }
+    .risk-demo { grid-template-columns: 1fr; }
+    nav ul { display: none; }
+    h1 { font-size: 40px; }
+  }
+  @media(max-width: 640px) {
+    .container { padding: 0 20px; }
+    nav .inner { padding: 0 20px; }
+    .hero-stats { flex-direction: column; gap: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="inner">
+    <a href="#" class="logo">
+      <div class="logo-seal">⚖</div>
+      LEXAI
+    </a>
+    <ul>
+      <li><a href="#how">Nasıl Çalışır</a></li>
+      <li><a href="#features">Özellikler</a></li>
+      <li><a href="#pricing">Fiyatlar</a></li>
+      <li><a href="#faq">SSS</a></li>
+    </ul>
+    <a href="#pricing" class="nav-cta">Ücretsiz Dene</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="container">
+    <div style="max-width:600px">
+      <div class="hero-badge"><span class="badge-dot"></span> Yapay Zeka Destekli · Mac & Windows</div>
+      <h1>Sözleşmenizi<em>Anında Analiz Edin</em></h1>
+      <p class="hero-sub">Avukat ücretleri olmadan profesyonel hukuki risk analizi. Kira kontratından iş teklifine, NDA'dan freelance anlaşmaya — 30 saniyede kapsamlı rapor.</p>
+      <div class="hero-actions">
+        <button class="btn-primary" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Ücretsiz Başla →</button>
+        <button class="btn-secondary" onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})">Nasıl Çalışır?</button>
+      </div>
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-num" data-target="50000">0</div>
+          <div class="stat-label">Analiz Yapıldı</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" data-target="97">0</div>
+          <div class="stat-label">% Doğruluk</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" data-target="30">0</div>
+          <div class="stat-label">Sn. Analiz Süresi</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Animated document -->
+  <div class="hero-visual">
+    <div class="doc-card">
+      <div class="scan-line"></div>
+      <div class="doc-header">
+        <div class="doc-title">KİRA SÖZLEŞMESİ — 2024</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#334155">TARANIYOR...</div>
+      </div>
+      <div class="doc-line w-90"></div>
+      <div class="doc-line w-75"></div>
+      <div class="doc-line w-85"></div>
+      <div class="doc-line flagged" style="position:relative;padding-right:60px">
+        <span class="flag-tag">⚠ RİSK</span>
+      </div>
+      <div class="doc-line w-60"></div>
+      <div class="doc-line w-90"></div>
+      <div class="doc-line flagged-warn" style="position:relative;padding-right:70px">
+        <span class="flag-tag" style="background:var(--amber)">DİKKAT</span>
+      </div>
+      <div class="doc-line w-75"></div>
+      <div class="doc-line w-85"></div>
+      <div class="doc-line flagged" style="position:relative;padding-right:60px">
+        <span class="flag-tag">⚠ RİSK</span>
+      </div>
+      <div class="doc-line w-90"></div>
+      <div class="doc-line w-60"></div>
+      <div class="risk-badge">
+        <div>
+          <div class="risk-num" id="hero-score">74</div>
+        </div>
+        <div>
+          <div class="risk-text">YÜKSEK RİSK</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#6b7a8d;margin-top:4px">3 kritik madde tespit edildi</div>
+        </div>
+        <div style="margin-left:auto">
+          <div style="width:48px;height:48px;position:relative">
+            <svg viewBox="0 0 40 40" width="48" height="48">
+              <circle cx="20" cy="20" r="15" fill="none" stroke="#1a0808" stroke-width="4"/>
+              <circle cx="20" cy="20" r="15" fill="none" stroke="#e74c3c" stroke-width="4"
+                stroke-dasharray="70.7 24" stroke-dashoffset="23.6" stroke-linecap="round" transform="rotate(-90 20 20)"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:11px;color:#e74c3c;font-weight:700">74</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGOS -->
+<section class="logos-section">
+  <div class="container">
+    <div class="logos-label">Kimler Kullanıyor?</div>
+    <div class="logos-track">
+      <div class="logo-item">FREELANCER'LAR</div>
+      <div class="logo-item">KİRACILAR</div>
+      <div class="logo-item">KOBİ'LER</div>
+      <div class="logo-item">İŞ ARAYANLAR</div>
+      <div class="logo-item">GİRİŞİMCİLER</div>
+      <div class="logo-item">AJANSLAR</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Süreç</div>
+      <h2>Üç Adımda<em>Tam Analiz</em></h2>
+      <p class="section-sub">PDF yükle, saniyeler içinde kapsamlı hukuki risk raporu al. Avukat bekleme süresi yok, fatura şoku yok.</p>
+    </div>
+    <div class="steps reveal" style="transition-delay:0.2s">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-icon">📄</div>
+        <div class="step-title">Sözleşmeyi Yükle</div>
+        <div class="step-text">PDF, Word veya metin olarak sözleşmenizi sürükle-bırak ile yükleyin. Kira, iş teklifi, NDA, freelance anlaşma — her sözleşme türü desteklenir.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-icon">⚡</div>
+        <div class="step-title">Yapay Zeka Analiz Eder</div>
+        <div class="step-text">Motorumuz tüm maddeleri tarar, 9 boyutlu risk çerçevesine göre puanlar, piyasa normlarıyla karşılaştırır ve tehlikeli kısımları işaretler.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-icon">📊</div>
+        <div class="step-title">Raporunu Al, Güçlü Ol</div>
+        <div class="step-text">Risk skoru, kırmızı bayraklar, müzakere stratejisi ve profesyonel yeniden yazım önerileri içeren tam raporu PDF/Word olarak indir.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section" id="features" style="padding-top:0">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Özellikler</div>
+      <h2>Tek Araçla<em>Her Şey</em></h2>
+    </div>
+    <div class="features-grid reveal" style="transition-delay:0.1s">
+      <div class="feature">
+        <div class="feature-icon">🎯</div>
+        <div class="feature-title">5 Boyutlu Risk Skoru</div>
+        <div class="feature-text">Genel risk, finansal risk, hukuki maruziyet, esneklik ve tek taraflılık indeksi — 0-100 arasında sayısal puanlama. Her skor neden verildiğiyle birlikte açıklanır.</div>
+        <div class="feature-tag">0–100 Puanlama</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🚩</div>
+        <div class="feature-title">Kırmızı Bayrak Tespiti</div>
+        <div class="feature-text">Sınırsız sorumluluk, otomatik yenileme tuzakları, tek taraflı fesih, orantısız ceza maddeleri, geniş rekabet yasağı ve gizli maliyet yapıları anında tespit edilir.</div>
+        <div class="feature-tag">Gerçek Dünya Etkisi</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📋</div>
+        <div class="feature-title">Eksik Madde Analizi</div>
+        <div class="feature-text">Force majeure, veri koruma, sorumluluk sınırlaması, yetki alanı açıklığı gibi eksik standart maddeler tespit edilir ve neden önemli olduğu açıklanır.</div>
+        <div class="feature-tag">Standart Karşılaştırma</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">✏️</div>
+        <div class="feature-title">Müzakereye Hazır Yeniden Yazım</div>
+        <div class="feature-text">Her yüksek riskli madde için profesyonel hukuki üslupla yeniden yazılmış alternatif metin üretilir. Karşı teklifinizi hazır olarak masaya götürün.</div>
+        <div class="feature-tag">Profesyonel Dil</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">⚖️</div>
+        <div class="feature-title">Piyasa Normu Karşılaştırması</div>
+        <div class="feature-text">Depozit oranları, ihbar süreleri, ceza yüzdeleri, ödeme vadesi — sözleşmeniz sektör standartlarından ne kadar sapıyor? Rakamlarla gösterilir.</div>
+        <div class="feature-tag">Sektör Benchmark</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🇹🇷</div>
+        <div class="feature-title">Türkçe & İngilizce Destek</div>
+        <div class="feature-text">Hem Türkçe hem İngilizce sözleşmeleri analiz eder, raporları her iki dilde oluşturur. Yabancı dilde aldığınız belgeleri de kolayca anlayın.</div>
+        <div class="feature-tag">Çift Dil</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RISK DEMO -->
+<section class="risk-demo-section" id="demo">
+  <div class="container">
+    <div class="reveal" style="text-align:center">
+      <div class="section-label" style="justify-content:center">Örnek Analiz</div>
+      <h2>Gerçek Bir Kira Sözleşmesi<em>Analizi</em></h2>
+      <p class="section-sub" style="margin:20px auto 0">İstanbul'da standart bir kira sözleşmesi için üretilen gerçek analiz çıktısı.</p>
+    </div>
+    <div class="risk-demo reveal" style="transition-delay:0.15s">
+      <div class="score-board">
+        <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold-dim);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">Risk Skorları</div>
+        <div class="score-row">
+          <div class="score-label">Genel Risk</div>
+          <div class="score-bar-wrap"><div class="score-bar" style="width:74%;background:#e74c3c"></div></div>
+          <div class="score-val" style="color:#e74c3c">74</div>
+        </div>
+        <div class="score-row">
+          <div class="score-label">Finansal Risk</div>
+          <div class="score-bar-wrap"><div class="score-bar" style="width:81%;background:#c0392b"></div></div>
+          <div class="score-val" style="color:#c0392b">81</div>
+        </div>
+        <div class="score-row">
+          <div class="score-label">Hukuki Maruziyet</div>
+          <div class="score-bar-wrap"><div class="score-bar" style="width:68%;background:#e67e22"></div></div>
+          <div class="score-val" style="color:#e67e22">68</div>
+        </div>
+        <div class="score-row">
+          <div class="score-label">Esneklik Riski</div>
+          <div class="score-bar-wrap"><div class="score-bar" style="width:55%;background:#f39c12"></div></div>
+          <div class="score-val" style="color:#f39c12">55</div>
+        </div>
+        <div class="score-row">
+          <div class="score-label">Tek Taraflılık</div>
+          <div class="score-bar-wrap"><div class="score-bar" style="width:79%;background:#c0392b"></div></div>
+          <div class="score-val" style="color:#c0392b">79</div>
+        </div>
+        <div style="margin-top:20px;padding:16px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.2);border-radius:3px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#e74c3c;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">⚠ Kritik Uyarı</div>
+          <div style="font-size:13px;color:#fca5a5;line-height:1.7">Ev sahibi herhangi bir gerekçe göstermeksizin sözleşmeyi 30 gün içinde feshedebilir maddesi sizi son derece savunmasız bırakmaktadır.</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold-dim);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px">Tespit Edilen Kırmızı Bayraklar</div>
+        <div class="flag-list">
+          <div class="flag-item critical">
+            <div class="flag-item-header">
+              <div class="flag-name">Tek Taraflı Fesih Hakkı</div>
+              <div class="flag-severity sev-critical">KRİTİK</div>
+            </div>
+            <div class="flag-desc">Ev sahibi 30 gün önceden bildirerek sözleşmeyi istediği zaman feshedebilir. Kiracıya aynı hak tanınmamıştır. Bu ciddi bir dengesizliktir.</div>
+          </div>
+          <div class="flag-item high">
+            <div class="flag-item-header">
+              <div class="flag-name">%40 Gecikme Cezası</div>
+              <div class="flag-severity sev-high">YÜKSEK</div>
+            </div>
+            <div class="flag-desc">Kira ödemesinde 5 günden fazla gecikme halinde aylık %40 gecikme faizi uygulanacaktır. Piyasa normu %2–5 arasındadır.</div>
+          </div>
+          <div class="flag-item medium">
+            <div class="flag-item-header">
+              <div class="flag-name">Force Majeure Maddesi Yok</div>
+              <div class="flag-severity sev-medium">ORTA</div>
+            </div>
+            <div class="flag-desc">Doğal afet, pandemi gibi mücbir sebep halleri sözleşmede düzenlenmemiştir. Bu boşluk her iki taraf için de risk oluşturmaktadır.</div>
+          </div>
+          <div class="flag-item high">
+            <div class="flag-item-header">
+              <div class="flag-name">Belirsiz Hasar Sorumluluğu</div>
+              <div class="flag-severity sev-high">YÜKSEK</div>
+            </div>
+            <div class="flag-desc">"Normal yıpranma" tanımı yapılmamış. Çıkışta ev sahibi hasar tespitinde tek yetkili olarak belirlenmiştir.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="section" id="pricing">
+  <div class="container">
+    <div class="reveal" style="text-align:center">
+      <div class="section-label" style="justify-content:center">Fiyatlandırma</div>
+      <h2>Avukat Ücreti Değil,<em>Zeka Ücreti</em></h2>
+      <p class="section-sub" style="margin:20px auto 0">Bir avukat saati ortalama 500–2000₺. LexAI ile tüm sözleşmelerinizi aylık sabit ücretle analiz edin.</p>
+    </div>
+    <div class="pricing-grid reveal" style="transition-delay:0.1s">
+      <div class="plan">
+        <div class="plan-name">Başlangıç</div>
+        <div class="plan-price">Ücretsiz</div>
+        <div class="plan-period">sonsuza kadar</div>
+        <div class="plan-divider"></div>
+        <ul class="plan-features">
+          <li>Ayda 3 analiz hakkı</li>
+          <li>Temel risk skoru</li>
+          <li>Kırmızı bayrak tespiti</li>
+          <li class="unavail">Müzakere stratejisi</li>
+          <li class="unavail">Yeniden yazım önerileri</li>
+          <li class="unavail">PDF/Word rapor indirme</li>
+        </ul>
+        <button class="btn-plan">Hemen Başla</button>
+      </div>
+      <div class="plan featured">
+        <div class="plan-name">Profesyonel</div>
+        <div class="plan-price"><sup>₺</sup>299</div>
+        <div class="plan-period">/ ay · KDV dahil</div>
+        <div class="plan-divider"></div>
+        <ul class="plan-features">
+          <li>Sınırsız analiz</li>
+          <li>Tüm risk boyutları</li>
+          <li>Kırmızı bayrak + piyasa karşılaştırması</li>
+          <li>Müzakere stratejisi</li>
+          <li>Yeniden yazım önerileri</li>
+          <li>PDF & Word rapor indirme</li>
+        </ul>
+        <button class="btn-plan featured-btn">14 Gün Ücretsiz Dene</button>
+      </div>
+      <div class="plan">
+        <div class="plan-name">Kurumsal</div>
+        <div class="plan-price"><sup>₺</sup>899</div>
+        <div class="plan-period">/ ay · KDV dahil</div>
+        <div class="plan-divider"></div>
+        <ul class="plan-features">
+          <li>5 kullanıcıya kadar</li>
+          <li>Tüm Profesyonel özellikler</li>
+          <li>Sözleşme geçmişi & arşiv</li>
+          <li>API erişimi</li>
+          <li>Öncelikli destek</li>
+          <li>Özel şirket şablonları</li>
+        </ul>
+        <button class="btn-plan">İletişime Geç</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="section" style="padding-top:0">
+  <div class="container">
+    <div class="reveal" style="text-align:center">
+      <div class="section-label" style="justify-content:center">Kullanıcı Yorumları</div>
+      <h2>Binlerce Kişi<em>Güveniyor</em></h2>
+    </div>
+    <div class="testimonials reveal" style="transition-delay:0.1s">
+      <div class="testimonial">
+        <div class="stars">★★★★★</div>
+        <div class="testimonial-text">Kiracı olarak sözleşmemi imzalamadan önce kullandım. İki kritik madde buldu — biri ev sahibinin istediği zaman çıkarabilmesine izin veriyordu. Müzakere ettim, değiştirdim. Kesinlikle tavsiye ederim.</div>
+        <div class="testimonial-author">
+          <div class="author-avatar">👩</div>
+          <div>
+            <div class="author-name">Ayşe K.</div>
+            <div class="author-role">Kiracı · İstanbul</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial">
+        <div class="stars">★★★★★</div>
+        <div class="testimonial-text">Freelance çalışıyorum ve her müşteriyle ayrı sözleşme yapıyorum. LexAI artık iş akışımın vazgeçilmez parçası. Müzakere önerileri gerçekten profesyonel kalitede.</div>
+        <div class="testimonial-author">
+          <div class="author-avatar">👨</div>
+          <div>
+            <div class="author-name">Mert D.</div>
+            <div class="author-role">Serbest Yazılım Geliştirici</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial">
+        <div class="stars">★★★★★</div>
+        <div class="testimonial-text">10 kişilik bir ajans yönetiyorum. Her iş sözleşmesi için avukat tutmak artık mümkün değil. LexAI hem zaman hem para tasarrufu sağlıyor. Kurumsal planı kullanıyoruz.</div>
+        <div class="testimonial-author">
+          <div class="author-avatar">👩</div>
+          <div>
+            <div class="author-name">Selin M.</div>
+            <div class="author-role">Ajans Kurucusu · Ankara</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section" style="padding-top:0" id="faq">
+  <div class="container">
+    <div class="reveal" style="text-align:center">
+      <div class="section-label" style="justify-content:center">SSS</div>
+      <h2>Merak Edilenler</h2>
+    </div>
+    <div class="faq-list reveal" style="transition-delay:0.1s">
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">LexAI hukuki tavsiye mi veriyor? <span class="arrow">+</span></button>
+        <div class="faq-a">Hayır. LexAI yapay zeka destekli bir risk analiz aracıdır ve çıktıları yalnızca bilgilendirme amaçlıdır. Hukuki bağlayıcı kararlar için bir avukana danışmanız önerilir. Ancak hangi konularda soru sormanız gerektiğini ve ne için müzakere etmeniz gerektiğini net olarak gösterir.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">Sözleşme verilerim güvende mi? <span class="arrow">+</span></button>
+        <div class="faq-a">Yüklediğiniz sözleşmeler yalnızca analiz süresi boyunca işlenir ve saklanmaz. Verileriniz üçüncü taraflarla paylaşılmaz. Tüm bağlantılar HTTPS ile şifrelenir.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">Hangi sözleşme türleri destekleniyor? <span class="arrow">+</span></button>
+        <div class="faq-a">Kira sözleşmeleri, iş teklifleri, gizlilik anlaşmaları (NDA), freelance hizmet sözleşmeleri, tedarikçi anlaşmaları, ortaklık sözleşmeleri, franchise anlaşmaları ve daha fazlası. Genel metin formatında olan her türlü sözleşme analiz edilebilir.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">Mac ve Windows'da aynı mı çalışıyor? <span class="arrow">+</span></button>
+        <div class="faq-a">Evet. LexAI hem macOS hem Windows için ayrı native uygulama olarak sunulur. Her iki platformda da tam özellik desteği mevcuttur. İndirme sonrası kurulum 2 dakika alır.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">İngilizce sözleşmeleri de analiz edebiliyor mu? <span class="arrow">+</span></button>
+        <div class="faq-a">Evet, LexAI Türkçe ve İngilizce sözleşmeleri tam olarak destekler. Raporu istediğiniz dilde alabilirsiniz. Yakın dönemde daha fazla dil desteği eklenecektir.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="container">
+    <div class="section-label reveal" style="justify-content:center">Hemen Başlayın</div>
+    <h2 class="reveal">İmzalamadan Önce<em>Anlayın</em></h2>
+    <p class="reveal" style="transition-delay:0.1s">Avukat ücretlerini ödemeden, haftalar beklemeden — sözleşmenizi dakikalar içinde anlayın ve güçlü bir konumdan masaya oturun.</p>
+    <div class="reveal" style="transition-delay:0.2s">
+      <button class="btn-primary" onclick="alert('Uygulama yakında yayında!')">Ücretsiz İndir — Mac & Windows</button>
+    </div>
+    <div class="cta-note reveal" style="transition-delay:0.3s">Kredi kartı gerekmez · 14 gün ücretsiz · Kurulum 2 dakika</div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="#" class="logo" style="font-size:18px">
+          <div class="logo-seal" style="width:28px;height:28px;font-size:12px">⚖</div>
+          LEXAI
+        </a>
+        <p>Yapay zeka destekli sözleşme analiz motoru. Milyonlarca insanın avukat tutamadan hukuki riskleri anlamasını sağlıyoruz.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Ürün</h4>
+        <ul>
+          <li><a href="#">Özellikler</a></li>
+          <li><a href="#">Fiyatlar</a></li>
+          <li><a href="#">İndir</a></li>
+          <li><a href="#">API</a></li>
+        </ul>
+      </div>
+      <div class="footer-links">
+        <h4>Destek</h4>
+        <ul>
+          <li><a href="#">SSS</a></li>
+          <li><a href="#">İletişim</a></li>
+          <li><a href="#">Gizlilik Politikası</a></li>
+          <li><a href="#">Kullanım Koşulları</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2024 LexAI. Tüm hakları saklıdır.</p>
+      <p class="disclaimer-text">Bu yazılım hukuki tavsiye vermez. Çıktılar yalnızca bilgilendirme amaçlıdır. Hukuki bağlayıcı kararlar için nitelikli bir avukana danışınız.</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Cursor
+  const cursor = document.getElementById('cursor');
+  const ring = document.getElementById('cursor-ring');
+  let mx = 0, my = 0, rx = 0, ry = 0;
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; cursor.style.left = mx + 'px'; cursor.style.top = my + 'px'; });
+  function animateRing() {
+    rx += (mx - rx) * 0.12; ry += (my - ry) * 0.12;
+    ring.style.left = rx + 'px'; ring.style.top = ry + 'px';
+    requestAnimationFrame(animateRing);
+  }
+  animateRing();
+  document.querySelectorAll('button, a, .step, .feature, .plan, .faq-q').forEach(el => {
+    el.addEventListener('mouseenter', () => { cursor.style.width = '20px'; cursor.style.height = '20px'; ring.style.width = '50px'; ring.style.height = '50px'; });
+    el.addEventListener('mouseleave', () => { cursor.style.width = '12px'; cursor.style.height = '12px'; ring.style.width = '36px'; ring.style.height = '36px'; });
+  });
+
+  // Scroll reveal
+  const reveals = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } });
+  }, { threshold: 0.1 });
+  reveals.forEach(r => observer.observe(r));
+
+  // Counter animation
+  function animateCounter(el, target, suffix = '') {
+    let start = 0;
+    const duration = 2000;
+    const startTime = performance.now();
+    function update(time) {
+      const progress = Math.min((time - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.floor(eased * target).toLocaleString('tr') + suffix;
+      if (progress < 1) requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+  }
+  const statsObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        const target = parseInt(e.target.dataset.target);
+        const suffix = e.target.dataset.suffix || (e.target.dataset.target === '30' ? ' sn.' : (e.target.dataset.target === '97' ? '%' : '+'));
+        animateCounter(e.target, target, suffix);
+        statsObserver.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.5 });
+  document.querySelectorAll('[data-target]').forEach(el => statsObserver.observe(el));
+
+  // FAQ
+  function toggleFaq(btn) {
+    const answer = btn.nextElementSibling;
+    const isOpen = btn.classList.contains('open');
+    document.querySelectorAll('.faq-q.open').forEach(b => { b.classList.remove('open'); b.nextElementSibling.classList.remove('open'); });
+    if (!isOpen) { btn.classList.add('open'); answer.classList.add('open'); }
+  }
+
+  // Nav scroll effect
+  const nav = document.querySelector('nav');
+  window.addEventListener('scroll', () => {
+    nav.style.background = window.scrollY > 50 ? 'rgba(4,8,15,0.97)' : 'linear-gradient(to bottom, rgba(4,8,15,0.95), rgba(4,8,15,0))';
+  });
+</script>
+</body>
+</html>
